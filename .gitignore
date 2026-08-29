@@ -75,6 +75,9 @@ data/
 .idea
 .gstack/
 
+# Local offline-deployment image and BuildKit caches
+/deploy/.cache/
+
 # Python (agent tooling)
 __pycache__/
 *.pyc

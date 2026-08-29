@@ -52,6 +52,9 @@ config="$(
 
 require_config "$config" 'published: "3100"'
 require_config "$config" 'published: "9100"'
+require_config "$config" 'published: "18080"'
+require_config "$config" 'image: nginx:1.29.8-alpine'
+require_config "$config" 'target: /etc/nginx/conf.d/default.conf'
 require_config "$config" 'FRONTEND_ORIGIN: http://localhost:3100'
 require_config "$config" 'GOOGLE_REDIRECT_URI: http://localhost:3100/auth/callback'
 require_config "$config" 'MULTICA_APP_URL: http://localhost:3100'

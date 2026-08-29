@@ -44,3 +44,8 @@ coverage
 /.github/
 /deploy/
 /scripts/
+
+# The apps/web allow rule above can re-include local generated content. Keep
+# it out of the production build context (apps/web/.next can be several GiB).
+/apps/web/.next/
+/apps/web/node_modules/
