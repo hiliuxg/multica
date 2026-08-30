@@ -193,7 +193,7 @@ cd multica-v0.4.35-linux-amd64-server
 程序本身不强制域名，但公网部署强烈建议使用域名和 HTTPS。一个域名已经足够，例如：
 
 ```text
-multica.example.com
+kudata-multica.tmeoa.com
 ```
 
 原因如下：
@@ -210,25 +210,29 @@ multica.example.com
 先生成环境文件。第二个参数是 Compose Nginx 网关监听的服务器私网 IP；如果外部 Nginx 与 Docker 在同一台服务器上，可省略它并保留 `127.0.0.1`。脚本会拒绝覆盖已有 `.env`，也会拒绝 `0.0.0.0`：
 
 ```bash
-./prepare-env.sh multica.example.com 10.34.81.19
+./prepare-env.sh kudata-multica.tmeoa.com 10.34.81.19
 ```
 
 检查 `.env`，至少确认这些值：
 
 ```dotenv
-FRONTEND_ORIGIN=https://multica.example.com
-MULTICA_APP_URL=https://multica.example.com
-MULTICA_PUBLIC_URL=https://multica.example.com
-MULTICA_DAEMON_SERVER_URL=https://multica.example.com
-GOOGLE_REDIRECT_URI=https://multica.example.com/auth/callback
+FRONTEND_ORIGIN=https://kudata-multica.tmeoa.com
+MULTICA_APP_URL=https://kudata-multica.tmeoa.com
+MULTICA_PUBLIC_URL=https://kudata-multica.tmeoa.com
+MULTICA_DAEMON_SERVER_URL=https://kudata-multica.tmeoa.com
 GATEWAY_BIND_ADDRESS=10.34.81.19
 GATEWAY_PORT=18080
+AUTH_MODE=tmeoa
+TPP_APPSECRET=<与 TMEOA 网关约定的应用密钥>
+TMEOA_MAX_CLOCK_SKEW=5m
+ALLOW_SIGNUP=false
+ALLOWED_EMAIL_DOMAINS=tencentmusic.com
 MULTICA_IMAGE_TAG=v0.4.35-local
 ```
 
-如果要用邮件发送登录验证码，配置 Resend 或 SMTP。暂时不配置邮件也能启动，验证码会打印在 backend 日志里。
+`TPP_APPSECRET` 必须使用 TME 网关签发 `x-token` 时配置的同一个值，不能保留 `CHANGE_ME_TPP_APPSECRET`。企业登录模式不依赖邮件或 Google OAuth；访问根路径时会使用网关注入的 `x-token`、`x-timestamp`、`x-request-id` 建立 Multica 会话。新用户从现有 onboarding 欢迎页开始，老用户进入已有工作区。
 
-Compose 内置的 `nginx.conf` 已经完成单域名路径分流：API、认证、上传和 WebSocket 进入 backend，其余请求进入 frontend。外部 Nginx 只需把整个域名代理到 `10.34.81.19:18080`，并保留 Host、原始 HTTPS scheme 和 WebSocket Upgrade。外部 Nginx 的 `http` 段加入：
+Compose 内置的 `nginx.conf` 已经完成单域名路径分流：API、认证、上传和 WebSocket 进入 backend，TMEOA 回调和其他页面进入 frontend。外部 Nginx 只需把整个域名代理到 `10.34.81.19:18080`，并保留 Host、原始 HTTPS scheme、WebSocket Upgrade 以及 TME 网关注入的三个认证 Header。外部 Nginx 的 `http` 段加入：
 
 ```nginx
 map $http_upgrade $connection_upgrade {
@@ -248,6 +252,9 @@ location / {
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Token $http_x_token;
+    proxy_set_header X-Timestamp $http_x_timestamp;
+    proxy_set_header X-Request-ID $http_x_request_id;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_read_timeout 3600s;
@@ -255,7 +262,7 @@ location / {
 }
 ```
 
-只允许外部 Nginx 的源 IP 访问服务器 `18080`。PostgreSQL、`3000`、`8080` 不需要离开服务器；不要把任何 Compose 端口绑定到 `0.0.0.0`。
+只允许外部 Nginx 的源 IP 访问服务器 `18080`。PostgreSQL、`3000`、`8080` 不需要离开服务器；不要把任何 Compose 端口绑定到 `0.0.0.0`。TME 网关或最外层可信代理必须先删除客户端提交的同名 `x-token`、`x-timestamp`、`x-request-id`，再写入网关生成的值；如果任意客户端能直连 `18080`、`3000` 或 `8080`，就能绕过这条身份边界。当前上游协议是 AES-CBC 加短时间窗，不带独立 MAC；上游协议可升级时应优先使用 AES-GCM 或增加 HMAC。
 
 ## 七、怎样启动 Docker Compose？
 
@@ -269,10 +276,10 @@ docker compose --env-file .env -f docker-compose.yml up -d --pull never
 docker compose --env-file .env -f docker-compose.yml ps
 docker compose --env-file .env -f docker-compose.yml logs --tail 100 backend
 curl -fsS http://127.0.0.1:8080/readyz
-curl -fsS -H 'Host: multica.example.com' \
+curl -fsS -H 'Host: kudata-multica.tmeoa.com' \
   -H 'X-Forwarded-Proto: https' \
   http://10.34.81.19:18080/readyz
-curl -fsS https://multica.example.com/health
+curl -fsS https://kudata-multica.tmeoa.com/health
 ```
 
 正常的 backend 就绪响应类似：
@@ -337,13 +344,13 @@ Codex 必须能在当前终端独立完成请求。Multica 不会替你安装 Co
 
 ```bash
 multica setup self-host \
-  --server-url https://multica.example.com \
-  --app-url https://multica.example.com
+  --server-url https://kudata-multica.tmeoa.com \
+  --app-url https://kudata-multica.tmeoa.com
 ```
 
 该命令会：
 
-1. 请求 `https://multica.example.com/health` 检查 API；
+1. 请求 `https://kudata-multica.tmeoa.com/health` 检查 API；
 2. 打开浏览器完成 Multica 登录；
 3. 把 Multica 个人访问令牌和服务器地址保存到本机 profile；
 4. 检测 `PATH` 中的 Codex；

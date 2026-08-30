@@ -458,13 +458,18 @@ MULTICA_DAEMON_SERVER_URL=https://multica.example.com
 GOOGLE_REDIRECT_URI=https://multica.example.com/auth/callback
 MULTICA_TRUSTED_PROXIES=
 
+AUTH_MODE=tmeoa
+TPP_APPSECRET=CHANGE_ME_TPP_APPSECRET
+TMEOA_MAX_CLOCK_SKEW=5m
+
 MULTICA_IMAGE_TAG=$image_tag
 MULTICA_BACKEND_IMAGE=multica-backend
 MULTICA_WEB_IMAGE=multica-web
 MULTICA_NGINX_IMAGE=$nginx_image
 MULTICA_NGINX_CONFIG=./nginx.conf
 
-ALLOW_SIGNUP=true
+ALLOW_SIGNUP=false
+ALLOWED_EMAIL_DOMAINS=tencentmusic.com
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=noreply@multica.example.com
 SMTP_HOST=

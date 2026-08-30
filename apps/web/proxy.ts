@@ -48,15 +48,33 @@ function nextWithLocale(req: NextRequest): NextResponse {
 // edge.
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const hasSession = req.cookies.has("multica_logged_in");
+  const lastSlug = req.cookies.get("last_workspace_slug")?.value;
+
+  if (
+    process.env.AUTH_MODE?.trim().toLowerCase() === "tmeoa" &&
+    (pathname === "/" || pathname === "/login")
+  ) {
+    const destination = runtimeRewriteDestination("/auth/hg-sso", process.env);
+    if (destination) {
+      const exchange = new URL(destination);
+      exchange.search = req.nextUrl.search;
+      return NextResponse.rewrite(exchange, {
+        request: { headers: new Headers(req.headers) },
+      });
+    }
+    const callback = req.nextUrl.clone();
+    callback.pathname = "/auth/hg-sso/callback";
+    callback.search = "?error=authentication_failed";
+    return NextResponse.redirect(callback);
+  }
+
   const runtimeDestination = runtimeRewriteDestination(pathname, process.env);
   if (runtimeDestination) {
     const url = new URL(runtimeDestination);
     url.search = req.nextUrl.search;
     return NextResponse.rewrite(url);
   }
-
-  const hasSession = req.cookies.has("multica_logged_in");
-  const lastSlug = req.cookies.get("last_workspace_slug")?.value;
 
   // --- Legacy URL redirect: /issues/... → /{slug}/issues/... ---
   // Old bookmarks and clients that hit us before the slug migration would

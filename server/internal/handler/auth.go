@@ -168,6 +168,10 @@ func (h *Handler) issueJWT(user db.User) (string, error) {
 // event fires on that edge, covering both the verification-code and Google
 // OAuth entry points.
 func (h *Handler) findOrCreateUser(ctx context.Context, email string) (user db.User, isNew bool, err error) {
+	return h.findOrCreateUserWithName(ctx, email, "")
+}
+
+func (h *Handler) findOrCreateUserWithName(ctx context.Context, email, requestedName string) (user db.User, isNew bool, err error) {
 	if auth.IsTemporarilyDisabledUserEmail(email) {
 		return db.User{}, false, auth.ErrTemporarilyDisabledUser
 	}
@@ -189,15 +193,25 @@ func (h *Handler) findOrCreateUser(ctx context.Context, email string) (user db.U
 		return user, false, nil
 	}
 
-	name := email
-	if at := strings.Index(email, "@"); at > 0 {
-		name = email[:at]
+	name := strings.TrimSpace(requestedName)
+	if name == "" {
+		name = email
+		if at := strings.Index(email, "@"); at > 0 {
+			name = email[:at]
+		}
 	}
 	created, err := h.Queries.CreateUser(ctx, db.CreateUserParams{
 		Name:  name,
 		Email: email,
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			concurrent, lookupErr := h.Queries.GetUserByEmail(ctx, email)
+			if lookupErr == nil {
+				return concurrent, false, nil
+			}
+			return db.User{}, false, lookupErr
+		}
 		return db.User{}, false, err
 	}
 	return created, true, nil
@@ -275,7 +289,22 @@ func contains(slice []string, s string) bool {
 	return false
 }
 
+func (h *Handler) legacyAuthEnabled() bool {
+	return h.cfg.AuthMode != auth.AuthModeTMEOA
+}
+
+func (h *Handler) rejectLegacyAuth(w http.ResponseWriter) bool {
+	if h.legacyAuthEnabled() {
+		return false
+	}
+	writeError(w, http.StatusNotFound, "not found")
+	return true
+}
+
 func (h *Handler) SendCode(w http.ResponseWriter, r *http.Request) {
+	if h.rejectLegacyAuth(w) {
+		return
+	}
 	var req SendCodeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -366,6 +395,9 @@ func (h *Handler) SendCode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) VerifyCode(w http.ResponseWriter, r *http.Request) {
+	if h.rejectLegacyAuth(w) {
+		return
+	}
 	var req VerifyCodeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -492,6 +524,9 @@ type googleUserInfo struct {
 }
 
 func (h *Handler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.rejectLegacyAuth(w) {
+		return
+	}
 	var req GoogleLoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

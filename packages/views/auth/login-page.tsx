@@ -81,13 +81,21 @@ export function validateCliCallback(cliCallback: string): boolean {
   try {
     const cbUrl = new URL(cliCallback);
     if (cbUrl.protocol !== "http:") return false;
-    const h = cbUrl.hostname;
-    if (h === "localhost" || h === "127.0.0.1") return true;
-    // Allow RFC 1918 private IPs: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
-    if (/^10\./.test(h)) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-    if (/^192\.168\./.test(h)) return true;
-    return false;
+    const host = cbUrl.hostname;
+    if (host === "localhost") return true;
+
+    const octets = host.split(".");
+    if (
+      octets.length !== 4 ||
+      octets.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255)
+    ) {
+      return false;
+    }
+    const [first, second] = octets.map(Number);
+    if (first === 127) return true;
+    if (first === 10) return true;
+    if (first === 172 && second! >= 16 && second! <= 31) return true;
+    return first === 192 && second === 168;
   } catch {
     return false;
   }

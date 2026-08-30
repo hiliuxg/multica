@@ -389,6 +389,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	origins := allowedOrigins()
 
 	signupConfig := handler.Config{
+		AuthMode:                 os.Getenv("AUTH_MODE"),
+		TPPAppSecret:             os.Getenv("TPP_APPSECRET"),
+		TMEOAMaxClockSkew:        envDuration("TMEOA_MAX_CLOCK_SKEW", auth.DefaultTMEOAMaxClockSkew),
 		AllowSignup:              os.Getenv("ALLOW_SIGNUP") != "false",
 		AllowedEmails:            splitAndTrim(os.Getenv("ALLOWED_EMAILS")),
 		AllowedEmailDomains:      splitAndTrim(os.Getenv("ALLOWED_EMAIL_DOMAINS")),
@@ -1325,6 +1328,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	r.With(authRL).Post("/auth/send-code", h.SendCode)
 	r.With(authVerifyRL).Post("/auth/verify-code", h.VerifyCode)
 	r.With(authRL).Post("/auth/google", h.GoogleLogin)
+	r.Get("/auth/hg-sso", h.TMEOALogin)
 	r.Post("/auth/logout", h.Logout)
 
 	// Public API

@@ -280,6 +280,10 @@ func main() {
 		)
 		os.Exit(1)
 	}
+	if err := auth.ValidateTMEOAConfiguration(os.Getenv("AUTH_MODE"), os.Getenv("TPP_APPSECRET")); err != nil {
+		slog.Error("refusing to start: invalid enterprise authentication configuration", "error", err)
+		os.Exit(1)
+	}
 	if os.Getenv("JWT_SECRET") == "" {
 		slog.Warn("JWT_SECRET is not set — using insecure dev default (allowed only because APP_ENV is not production).")
 	}

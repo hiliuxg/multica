@@ -82,6 +82,9 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/callback}
+      AUTH_MODE: ${AUTH_MODE:-legacy}
+      TPP_APPSECRET: ${TPP_APPSECRET:-}
+      TMEOA_MAX_CLOCK_SKEW: ${TMEOA_MAX_CLOCK_SKEW:-5m}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-us-west-2}
       AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
@@ -206,6 +209,7 @@ services:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     environment:
       HOSTNAME: "0.0.0.0"
+      AUTH_MODE: ${AUTH_MODE:-legacy}
       REMOTE_API_URL: ${REMOTE_API_URL:-http://backend:8080}
       DOCS_URL: ${DOCS_URL:-}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}

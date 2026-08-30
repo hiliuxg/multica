@@ -708,8 +708,9 @@ describe("validateCliCallback", () => {
     expect(validateCliCallback("http://localhost:9876/callback")).toBe(true);
   });
 
-  it("accepts http://127.0.0.1", () => {
+  it("accepts loopback IPv4 literals", () => {
     expect(validateCliCallback("http://127.0.0.1:8080/cb")).toBe(true);
+    expect(validateCliCallback("http://127.255.255.255:8080/cb")).toBe(true);
   });
 
   it("accepts 10.x.x.x private IPs", () => {
@@ -736,10 +737,14 @@ describe("validateCliCallback", () => {
     expect(validateCliCallback("https://localhost:9876/callback")).toBe(false);
   });
 
-  it("rejects public IPs and domains", () => {
+  it("rejects public IPs, domains, and private-looking hostnames", () => {
     expect(validateCliCallback("http://evil.com:9876/callback")).toBe(false);
     expect(validateCliCallback("http://8.8.8.8:9876/callback")).toBe(false);
     expect(validateCliCallback("http://192.169.1.1:9876/callback")).toBe(false);
+    expect(validateCliCallback("http://10.evil.com:9876/callback")).toBe(false);
+    expect(validateCliCallback("http://172.16.evil.com:9876/callback")).toBe(false);
+    expect(validateCliCallback("http://192.168.evil.com:9876/callback")).toBe(false);
+    expect(validateCliCallback("http://10.0.0.999:9876/callback")).toBe(false);
   });
 
   it("rejects invalid URLs", () => {

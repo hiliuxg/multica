@@ -7,13 +7,17 @@ function makeRequest(
   path: string,
   cookies: Record<string, string> = {},
   host = "app.multica.test",
+  headers: Record<string, string> = {},
 ) {
   const cookieHeader = Object.entries(cookies)
     .map(([key, value]) => `${key}=${value}`)
     .join("; ");
 
   return new NextRequest(`https://${host}${path}`, {
-    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    headers: {
+      ...headers,
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+    },
   });
 }
 
@@ -49,6 +53,134 @@ function withoutRuntimeUpstreams(run: () => void) {
     restoreEnv("PORT", previousPort);
   }
 }
+
+describe("proxy TMEOA authentication", () => {
+  it.each(["/", "/login"])(
+    "rewrites %s to the enterprise auth exchange and preserves gateway headers",
+    (path) => {
+      const previousAuthMode = process.env.AUTH_MODE;
+      const previousRemoteApiUrl = process.env.REMOTE_API_URL;
+      process.env.AUTH_MODE = "tmeoa";
+      process.env.REMOTE_API_URL = "http://backend:8080";
+      try {
+        const res = proxy(
+          makeRequest(path, {}, "kudata-multica.tmeoa.com", {
+            "x-token": "encrypted-token",
+            "x-timestamp": "1788000000",
+            "x-request-id": "request-1",
+          }),
+        );
+
+        expect(res.headers.get("x-middleware-rewrite")).toBe(
+          "http://backend:8080/auth/hg-sso",
+        );
+        expect(res.headers.get("x-middleware-request-x-token")).toBe(
+          "encrypted-token",
+        );
+        expect(res.headers.get("x-middleware-request-x-timestamp")).toBe(
+          "1788000000",
+        );
+        expect(res.headers.get("x-middleware-request-x-request-id")).toBe(
+          "request-1",
+        );
+      } finally {
+        restoreEnv("AUTH_MODE", previousAuthMode);
+        restoreEnv("REMOTE_API_URL", previousRemoteApiUrl);
+      }
+    },
+  );
+
+  it("preserves CLI handoff parameters across the enterprise exchange", () => {
+    const previousAuthMode = process.env.AUTH_MODE;
+    const previousRemoteApiUrl = process.env.REMOTE_API_URL;
+    process.env.AUTH_MODE = "tmeoa";
+    process.env.REMOTE_API_URL = "http://backend:8080";
+    try {
+      const res = proxy(
+        makeRequest(
+          "/login?cli_callback=http%3A%2F%2Flocalhost%3A9876%2Fcallback&cli_state=abc",
+          {},
+          "kudata-multica.tmeoa.com",
+          {
+            "x-token": "encrypted-token",
+            "x-timestamp": "1788000000",
+            "x-request-id": "request-1",
+          },
+        ),
+      );
+      expect(res.headers.get("x-middleware-rewrite")).toBe(
+        "http://backend:8080/auth/hg-sso?cli_callback=http%3A%2F%2Flocalhost%3A9876%2Fcallback&cli_state=abc",
+      );
+    } finally {
+      restoreEnv("AUTH_MODE", previousAuthMode);
+      restoreEnv("REMOTE_API_URL", previousRemoteApiUrl);
+    }
+  });
+
+  it("revalidates an existing browser hint through the gateway exchange", () => {
+    const previousAuthMode = process.env.AUTH_MODE;
+    const previousRemoteApiUrl = process.env.REMOTE_API_URL;
+    process.env.AUTH_MODE = "tmeoa";
+    process.env.REMOTE_API_URL = "http://backend:8080";
+    try {
+      const res = proxy(
+        makeRequest("/", {
+          multica_logged_in: "1",
+          last_workspace_slug: "acme",
+        }),
+      );
+      expect(res.headers.get("x-middleware-rewrite")).toBe(
+        "http://backend:8080/auth/hg-sso",
+      );
+      expect(res.headers.get("location")).toBeNull();
+    } finally {
+      restoreEnv("AUTH_MODE", previousAuthMode);
+      restoreEnv("REMOTE_API_URL", previousRemoteApiUrl);
+    }
+  });
+
+  it("routes missing backend configuration to a closed enterprise error state", () => {
+    const previousAuthMode = process.env.AUTH_MODE;
+    process.env.AUTH_MODE = "tmeoa";
+    try {
+      withoutRuntimeUpstreams(() => {
+        const res = proxy(makeRequest("/"));
+        expect(res.headers.get("location")).toBe(
+          "https://app.multica.test/auth/hg-sso/callback?error=authentication_failed",
+        );
+      });
+    } finally {
+      restoreEnv("AUTH_MODE", previousAuthMode);
+    }
+  });
+
+  it("does not rewrite the frontend callback into the backend exchange", () => {
+    const previousAuthMode = process.env.AUTH_MODE;
+    const previousRemoteApiUrl = process.env.REMOTE_API_URL;
+    process.env.AUTH_MODE = "tmeoa";
+    process.env.REMOTE_API_URL = "http://backend:8080";
+    try {
+      const res = proxy(makeRequest("/auth/hg-sso/callback"));
+      expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    } finally {
+      restoreEnv("AUTH_MODE", previousAuthMode);
+      restoreEnv("REMOTE_API_URL", previousRemoteApiUrl);
+    }
+  });
+
+  it("keeps the legacy root behavior when AUTH_MODE is unset", () => {
+    withoutRuntimeUpstreams(() => {
+      const previousAuthMode = process.env.AUTH_MODE;
+      delete process.env.AUTH_MODE;
+      try {
+        const res = proxy(makeRequest("/"));
+        expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+      } finally {
+        restoreEnv("AUTH_MODE", previousAuthMode);
+      }
+    });
+  });
+});
 
 describe("proxy legacy workspace route redirects", () => {
   const sessionCookies = {

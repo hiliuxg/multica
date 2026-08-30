@@ -65,6 +65,9 @@ type dbExecutor interface {
 }
 
 type Config struct {
+	AuthMode            string
+	TPPAppSecret        string
+	TMEOAMaxClockSkew   time.Duration
 	AllowSignup         bool
 	AllowedEmails       []string
 	AllowedEmailDomains []string
@@ -396,6 +399,15 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 
 	if analyticsClient == nil {
 		analyticsClient = analytics.NoopClient{}
+	}
+	if cfg.TMEOAMaxClockSkew <= 0 {
+		cfg.TMEOAMaxClockSkew = auth.DefaultTMEOAMaxClockSkew
+	}
+	if mode, err := auth.NormalizeAuthMode(cfg.AuthMode); err == nil {
+		cfg.AuthMode = mode
+	} else {
+		slog.Warn("invalid AUTH_MODE, using legacy", "value", cfg.AuthMode)
+		cfg.AuthMode = auth.AuthModeLegacy
 	}
 	if mode, ok := normalizeAttachmentDownloadMode(cfg.AttachmentDownloadMode); ok {
 		cfg.AttachmentDownloadMode = string(mode)
